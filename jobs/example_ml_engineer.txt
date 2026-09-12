@@ -1,0 +1,40 @@
+Machine Learning Engineer, Intern (Summer 2026)
+Recommendation & Ranking Team
+
+About the role
+We are looking for an ML engineering intern to work on large-scale
+recommendation and ranking systems. You will work alongside research
+scientists and production engineers to prototype models, run offline
+evaluations, and ship improvements to systems serving millions of users.
+
+What you will do
+- Build and evaluate ranking and retrieval models (collaborative filtering,
+  two-tower retrieval, gradient-boosted trees, transformer-based rerankers).
+- Design and run offline experiments: define metrics, build evaluation
+  pipelines, and analyze results with statistical rigor.
+- Construct data pipelines to transform raw event logs into model-ready
+  training datasets using SQL and Python.
+- Collaborate with engineers to move promising prototypes toward production,
+  including model serving and monitoring.
+- Communicate findings clearly to both technical and non-technical partners.
+
+Minimum qualifications
+- Currently pursuing a Master's or PhD in Computer Science, Data Science,
+  Statistics, or a related quantitative field.
+- Strong programming skills in Python.
+- Solid grounding in machine learning fundamentals: supervised learning,
+  model evaluation, overfitting, regularization, and cross-validation.
+- Experience with at least one deep learning framework (PyTorch or TensorFlow).
+- Working knowledge of SQL and data manipulation libraries (pandas, NumPy).
+
+Preferred qualifications
+- Hands-on experience with recommender systems: matrix factorization,
+  collaborative filtering, content-based filtering, or learning-to-rank.
+- Experience with transformer architectures and modern NLP or information
+  retrieval methods, including retrieval-augmented generation.
+- Familiarity with model interpretability and explainability techniques
+  such as SHAP or attention analysis.
+- Experience with distributed data processing (Spark) or cloud platforms
+  (AWS, GCP).
+- Exposure to A/B testing and causal inference.
+- Prior internship or research experience in an applied ML setting.

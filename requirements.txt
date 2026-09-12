@@ -1,0 +1,18 @@
+# API mode (python match.py match job.txt)
+anthropic>=1.5.0
+
+# Profile building from PDF resumes (python match.py build-profile)
+pdfplumber>=0.11.0
+
+# ---------------------------------------------------------------------------
+# Optional. Local mode (--local) works with none of these installed: it falls
+# back to a pure-Python TF-IDF implementation that needs only the standard
+# library, so the offline path has no third-party dependency at all.
+# ---------------------------------------------------------------------------
+
+# Faster, better-tokenised TF-IDF. Used automatically when present.
+scikit-learn>=1.4.0
+
+# Semantic embeddings for --local --embeddings. Not installed by default: the
+# first run downloads a ~90 MB model.
+# sentence-transformers>=3.0.0

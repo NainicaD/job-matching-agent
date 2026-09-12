@@ -1,0 +1,22 @@
+# Personal data - never commit. The resumes stay on this machine only, and
+# profile.txt is excluded too: it consolidates the full work history from every
+# resume version into one file, which does not belong in a public repository.
+# Anyone cloning this regenerates their own with `python match.py build-profile`.
+resumes/
+profile.txt
+*.pdf
+*.docx
+
+# Generated
+profile.review.md
+.jobmatch_usage.jsonl
+
+# Environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+
+# macOS
+.DS_Store
