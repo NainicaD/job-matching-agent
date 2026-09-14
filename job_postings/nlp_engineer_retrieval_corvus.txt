@@ -1,0 +1,28 @@
+Title: NLP Engineer, Retrieval & Generation
+Company: Corvus AI
+Location: Remote (US)
+
+The role
+Build retrieval-augmented generation systems: semantic search, embedding
+pipelines, and reranking over large document collections.
+
+Responsibilities
+- Design and evaluate retrieval pipelines: chunking strategies, embedding
+  models, vector stores, and hybrid lexical/semantic search.
+- Fine-tune and evaluate transformer encoders for domain-specific retrieval.
+- Build evaluation harnesses measuring recall@k, MRR, and end-to-end answer
+  quality.
+- Apply OCR and document parsing to bring scanned sources into the index.
+- Work with LLM APIs for the generation stage, including prompt design and
+  structured output validation.
+
+Requirements
+- Strong Python; experience with PyTorch and HuggingFace Transformers.
+- Hands-on experience with embeddings, similarity search, and TF-IDF or
+  BM25 baselines.
+- Familiarity with vector databases such as Chroma, FAISS, or Pinecone.
+- Experience evaluating generative systems, not just building them.
+
+Nice to have
+- Experience with GANs or other generative architectures.
+- Published research or a strong portfolio of applied NLP projects.

@@ -5,14 +5,33 @@ anthropic>=1.5.0
 pdfplumber>=0.11.0
 
 # ---------------------------------------------------------------------------
-# Optional. Local mode (--local) works with none of these installed: it falls
-# back to a pure-Python TF-IDF implementation that needs only the standard
+# Retrieval / RAG stage (index-postings, rank, match --top-k)
+#
+# Heads up on size: sentence-transformers pulls in torch, so this group is
+# ~2-3 GB installed, and the embedding model itself is a one-time ~90 MB
+# download from HuggingFace on first use.
+#
+# You can skip this entire group. `--retrieval-backend tfidf` ranks postings
+# with the stdlib TF-IDF implementation instead - weaker (it matches strings,
+# not meaning) but instant, and it needs no download and no network.
+# ---------------------------------------------------------------------------
+
+langchain>=1.4.0
+langchain-community>=0.4.0        # document loaders (TextLoader)
+langchain-text-splitters>=1.1.0   # RecursiveCharacterTextSplitter
+langchain-chroma>=1.1.0           # vector store wrapper
+langchain-huggingface>=1.2.0      # HuggingFaceEmbeddings
+sentence-transformers>=3.0.0      # the local embedding model itself
+
+# NOTE on import paths: these are LangChain 1.x packages. Most tutorials target
+# 0.x, where the splitter lived in langchain.text_splitter and the embeddings in
+# langchain_community.embeddings. Both moved to their own packages above.
+
+# ---------------------------------------------------------------------------
+# Optional. Local reasoning (--local) works with none of these installed: it
+# falls back to a pure-Python TF-IDF implementation that needs only the standard
 # library, so the offline path has no third-party dependency at all.
 # ---------------------------------------------------------------------------
 
 # Faster, better-tokenised TF-IDF. Used automatically when present.
 scikit-learn>=1.4.0
-
-# Semantic embeddings for --local --embeddings. Not installed by default: the
-# first run downloads a ~90 MB model.
-# sentence-transformers>=3.0.0

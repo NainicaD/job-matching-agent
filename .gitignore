@@ -11,6 +11,10 @@ profile.txt
 profile.review.md
 .jobmatch_usage.jsonl
 
+# Vector store. Fully regenerable from ./job_postings/ with `index-postings`,
+# and it embeds your profile's neighbourhood, so it is not worth committing.
+chroma_db/
+
 # Environment
 .venv/
 venv/

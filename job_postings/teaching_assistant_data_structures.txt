@@ -1,0 +1,26 @@
+Title: Teaching Assistant, Data Structures and Machine Learning
+Company: Vasavi College of Engineering
+Location: Hyderabad, India
+
+Role
+Support faculty in delivering undergraduate Data Structures & Algorithms and
+Machine Learning & AI courses.
+
+Responsibilities
+- Lead recitation sessions and office hours for 60+ students per semester.
+- Clarify lecture concepts through group exercises and worked problems.
+- Design supplemental explanation frameworks and practice problems addressing
+  recurring student misconceptions.
+- Grade assignments, handling incomplete submissions and maintaining audit
+  trails.
+- Assist faculty in managing course operations and logistics.
+
+Required
+- Strong grasp of data structures, algorithms, and machine learning
+  fundamentals.
+- Prior experience explaining technical material to students.
+- Reliability and organization in managing coursework logistics.
+
+Preferred
+- Experience coordinating course operations across multiple semesters.
+- Python and algorithm implementation experience.

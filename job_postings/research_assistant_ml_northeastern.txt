@@ -1,0 +1,27 @@
+Title: Graduate Research Assistant, Applied Machine Learning
+Company: Northeastern University, Institute for Experiential AI
+Location: Boston, MA
+
+Overview
+Support faculty-led research projects applying machine learning to applied
+domains, from data collection through publication.
+
+Responsibilities
+- Conduct structured literature reviews and synthesize findings.
+- Build end-to-end data pipelines for research datasets, including OCR and
+  text extraction from source documents.
+- Implement and compare models across supervised and unsupervised methods.
+- Apply similarity measures and evaluation metrics appropriate to each study.
+- Maintain reproducible, well-documented experimental workflows.
+- Co-author papers and present at internal seminars.
+
+Qualifications
+- Enrolled in a Master's or PhD program in a quantitative field.
+- Python, scikit-learn, PyTorch.
+- Experience with research workflows: documentation, version control,
+  reproducibility.
+- Strong written communication.
+
+Preferred
+- Prior research internship experience.
+- Exposure to generative AI architectures and transformer models.

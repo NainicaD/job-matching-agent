@@ -1,0 +1,26 @@
+Title: Data Analyst, Business Intelligence
+Company: Northwind Retail Group
+Location: Quincy, MA
+
+Summary
+Own reporting and dashboards for the merchandising organization, turning
+transactional data into decisions.
+
+Responsibilities
+- Write and optimize SQL queries against the enterprise data warehouse.
+- Build and maintain dashboards in Power BI and Tableau.
+- Produce recurring reports on compliance metrics, inventory, and sales
+  performance for leadership.
+- Validate and transform data; document definitions and data lineage.
+- Partner with stakeholders across departments to scope reporting needs.
+
+Required qualifications
+- Bachelor's degree and two years of analytics experience.
+- Strong SQL and advanced Excel skills.
+- Experience with a BI tool: Power BI, Tableau, or Looker.
+- Clear written communication for non-technical audiences.
+
+Preferred
+- Python or R for data manipulation.
+- Experience with Smartsheet or similar project tracking tools.
+- Background supporting enterprise systems such as SAP.

@@ -1,0 +1,28 @@
+Title: SAP GTS Consultant
+Company: Arbor Consulting Partners
+Location: Hybrid - Boston, MA
+
+Role
+Implement and support SAP Global Trade Services for multinational clients
+across export and import compliance.
+
+Responsibilities
+- Configure end-to-end GTS solutions: export controls, import controls,
+  sanctioned party list screening, and preference management.
+- Lead requirements workshops with clients and stakeholders; document
+  business needs and translate them into system configuration.
+- Manage customs and compliance workflows for global trade processes.
+- Support integrations and broker setups between SAP and external systems.
+- Drive PMO coordination: track tasks, timelines, and deliverables.
+- Produce dashboards on compliance metrics for client leadership.
+
+Required
+- 2+ years hands-on SAP GTS implementation experience.
+- Experience across the full project lifecycle from requirements through
+  design, configuration, testing, and production deployment.
+- Strong client-facing communication skills.
+- Proficiency with Excel and project tracking tools such as Smartsheet.
+
+Preferred
+- Exposure to SAP Business AI components and workflow automation.
+- Interest in applying analytics or AI to compliance reporting.

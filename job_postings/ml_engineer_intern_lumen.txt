@@ -1,0 +1,31 @@
+Title: Machine Learning Engineer, Intern (Summer 2026)
+Company: Lumen Analytics
+Location: Boston, MA
+
+About the role
+Join the Recommendation & Ranking team to prototype models, run offline
+evaluations, and ship improvements to systems serving millions of users.
+
+What you will do
+- Build and evaluate ranking and retrieval models: collaborative filtering,
+  two-tower retrieval, gradient-boosted trees, transformer-based rerankers.
+- Design offline experiments: define metrics, build evaluation pipelines,
+  and analyze results with statistical rigor.
+- Construct data pipelines transforming raw event logs into model-ready
+  training datasets using SQL and Python.
+- Communicate findings to technical and non-technical partners.
+
+Minimum qualifications
+- Pursuing a Master's or PhD in Computer Science, Data Science, or Statistics.
+- Strong Python programming skills.
+- Solid machine learning fundamentals: supervised learning, model evaluation,
+  regularization, cross-validation.
+- Experience with PyTorch or TensorFlow.
+- Working knowledge of SQL, pandas, and NumPy.
+
+Preferred qualifications
+- Recommender systems: matrix factorization, collaborative filtering,
+  content-based filtering, or learning-to-rank.
+- Transformer architectures and modern NLP or information retrieval.
+- Model interpretability techniques such as SHAP or attention analysis.
+- Exposure to A/B testing and causal inference.

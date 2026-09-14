@@ -1,0 +1,28 @@
+Title: Data Scientist, Clinical Analytics
+Company: Meridian Health Systems
+Location: Cambridge, MA
+
+Position overview
+Build predictive models on large-scale claims and clinical data to support
+utilization management and clinical decision support.
+
+Responsibilities
+- Develop and validate supervised learning models for claim denial prediction
+  and patient risk stratification on large healthcare datasets.
+- Engineer features from structured claims data and unstructured clinical text.
+- Apply explainability methods (SHAP, feature importance) so clinical
+  stakeholders can interpret and trust model output.
+- Build reproducible pipelines from raw ingestion through model evaluation.
+- Present findings to clinical and operational leadership.
+
+Required
+- Master's degree in Data Science, Statistics, Biostatistics, or related field.
+- Python, SQL, scikit-learn, pandas.
+- Experience with gradient-boosted classifiers (XGBoost, LightGBM).
+- Understanding of model evaluation under class imbalance: AUROC, F1,
+  precision-recall tradeoffs.
+
+Preferred
+- Experience with clinical NLP or transformer models such as ClinicalBERT.
+- Familiarity with causal inference for observational healthcare data.
+- Exposure to HIPAA-regulated data environments.

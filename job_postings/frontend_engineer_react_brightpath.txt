@@ -1,0 +1,24 @@
+Title: Senior Frontend Engineer
+Company: BrightPath Commerce
+Location: Austin, TX
+
+The role
+Build and own the customer-facing storefront experience.
+
+Responsibilities
+- Develop responsive interfaces in React and TypeScript.
+- Own component library architecture and design system implementation.
+- Optimize Core Web Vitals: bundle splitting, lazy loading, image pipelines.
+- Implement accessible interfaces to WCAG 2.2 AA.
+- Write unit and end-to-end tests with Jest and Playwright.
+- Collaborate with designers in Figma on interaction details.
+
+Required
+- 5+ years frontend engineering with React.
+- Expert TypeScript, CSS architecture, and browser performance profiling.
+- Experience with Next.js server-side rendering.
+- Strong eye for visual detail and interaction polish.
+
+Preferred
+- GraphQL client experience with Apollo or Relay.
+- Web animation and micro-interaction work.

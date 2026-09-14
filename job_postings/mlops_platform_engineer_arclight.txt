@@ -1,0 +1,26 @@
+Title: MLOps Platform Engineer
+Company: Arclight Infrastructure
+Location: Remote (US)
+
+The role
+Own the platform that trains, serves, and monitors models in production.
+
+Responsibilities
+- Build and operate model serving infrastructure on Kubernetes with
+  autoscaling, canary rollouts, and blue/green deploys.
+- Manage infrastructure as code with Terraform across multi-region AWS.
+- Own CI/CD pipelines for model artifacts; implement automated rollback.
+- Instrument production monitoring: latency SLOs, drift detection, alerting
+  via Prometheus and Grafana.
+- Manage feature store infrastructure and streaming ingestion with Kafka.
+- Harden container images and manage secrets rotation.
+
+Required
+- 4+ years in platform, infrastructure, or SRE roles.
+- Deep Kubernetes and Terraform experience.
+- Strong Go or Python for tooling.
+- Production on-call experience owning uptime.
+
+Preferred
+- Experience with Ray, Kubeflow, or Airflow at scale.
+- gRPC service design and load testing.

@@ -3,13 +3,17 @@
 
     python match.py check                        # verify API credentials
     python match.py build-profile                # scan ./resumes/ -> profile.txt
-    python match.py match job.txt                # API mode (default)
+    python match.py index-postings               # scan ./job_postings/ -> vector store
+    python match.py rank                         # retrieval only: rank postings, no API calls
+    python match.py match --top-k 5              # retrieval + API reasoning on the top 5
+    python match.py match job.txt                # API mode on one explicit file
     python match.py match job.txt --dry-run      # print the payload, send nothing
     python match.py match job.txt --local        # offline, free, no key needed
     python match.py match job.txt --model claude-sonnet-5
 
 `anthropic` is imported lazily, inside the API code paths only, so --local and
---dry-run keep working on a machine where the SDK is not installed.
+--dry-run keep working on a machine where the SDK is not installed. The same is
+true of LangChain: it is only imported by the retrieval path.
 """
 
 from __future__ import annotations
@@ -20,11 +24,26 @@ from pathlib import Path
 
 from jobmatch import __version__
 
+# Retrieval defaults live with the retrieval code; imported here so the CLI help
+# text cannot drift from the actual behaviour. Neither module imports LangChain
+# or anthropic at import time, so this stays cheap.
+from jobmatch.postings import DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE
+from jobmatch.retrieval import (
+    BACKEND_EMBEDDINGS,
+    BACKEND_TFIDF,
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_FANOUT,
+    DEFAULT_STORE_DIR,
+    DEFAULT_TOP_K,
+)
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_PROFILE = PROJECT_ROOT / "profile.txt"
 DEFAULT_REVIEW = PROJECT_ROOT / "profile.review.md"
 DEFAULT_RESUMES = PROJECT_ROOT / "resumes"
 DEFAULT_LEDGER = PROJECT_ROOT / ".jobmatch_usage.jsonl"
+DEFAULT_POSTINGS = PROJECT_ROOT / "job_postings"
+DEFAULT_STORE = PROJECT_ROOT / DEFAULT_STORE_DIR
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -33,6 +52,42 @@ EXIT_ERROR = 1
 # --------------------------------------------------------------------------
 # Argument parsing
 # --------------------------------------------------------------------------
+
+
+def _add_retrieval_args(parser: argparse.ArgumentParser) -> None:
+    """Options shared by every command that runs the retrieval stage."""
+    group = parser.add_argument_group("retrieval (local, free, no API key)")
+    group.add_argument("--postings", type=Path, default=DEFAULT_POSTINGS)
+    group.add_argument(
+        "--store", type=Path, default=DEFAULT_STORE, help="vector store directory"
+    )
+    group.add_argument(
+        "--retrieval-backend",
+        choices=[BACKEND_EMBEDDINGS, BACKEND_TFIDF],
+        default=BACKEND_EMBEDDINGS,
+        help=f"{BACKEND_EMBEDDINGS}: sentence-transformer embeddings in Chroma "
+        f"(understands paraphrase; one-time model download). "
+        f"{BACKEND_TFIDF}: stdlib TF-IDF, no download, works fully offline.",
+    )
+    group.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+    group.add_argument(
+        "--chunk-size",
+        type=int,
+        default=DEFAULT_CHUNK_SIZE,
+        help=f"characters per chunk (default {DEFAULT_CHUNK_SIZE})",
+    )
+    group.add_argument(
+        "--chunk-overlap",
+        type=int,
+        default=DEFAULT_CHUNK_OVERLAP,
+        help=f"characters repeated between chunks (default {DEFAULT_CHUNK_OVERLAP})",
+    )
+    group.add_argument(
+        "--fanout",
+        type=int,
+        default=DEFAULT_FANOUT,
+        help=f"store hits per profile-chunk query (default {DEFAULT_FANOUT})",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -76,14 +131,51 @@ def build_parser() -> argparse.ArgumentParser:
         help="Jaccard similarity above which two bullets are flagged (default: 0.72)",
     )
 
+    # -- index-postings ---------------------------------------------------
+    index = subparsers.add_parser(
+        "index-postings",
+        help="scan ./job_postings/ and build or update the vector store",
+    )
+    _add_retrieval_args(index)
+    index.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="delete the store and re-embed everything from scratch",
+    )
+
+    # -- rank -------------------------------------------------------------
+    rank = subparsers.add_parser(
+        "rank",
+        help="retrieval stage only: rank all postings by relevance, no API calls",
+    )
+    _add_retrieval_args(rank)
+    rank.add_argument("--profile", type=Path, default=DEFAULT_PROFILE)
+    rank.add_argument(
+        "--top-k",
+        type=int,
+        default=None,
+        help=f"mark the top-k cutoff in the output (default {DEFAULT_TOP_K})",
+    )
+    rank.add_argument("--json", action="store_true")
+    rank.add_argument("--no-color", action="store_true")
+
     # -- match ------------------------------------------------------------
     match = subparsers.add_parser("match", help="match the profile against a job")
     match.add_argument(
         "jobs",
-        nargs="+",
+        nargs="*",
         metavar="JOB",
-        help="job description file(s), or - to read one from stdin",
+        help="job description file(s), or - for stdin. Omit to rank ./job_postings/ "
+        "by retrieval and match the top-k instead.",
     )
+    match.add_argument(
+        "--top-k",
+        type=int,
+        default=None,
+        help=f"how many retrieval-ranked postings to reason over (default "
+        f"{DEFAULT_TOP_K}). Ignored when explicit JOB files are given.",
+    )
+    _add_retrieval_args(match)
     mode = match.add_mutually_exclusive_group()
     mode.add_argument(
         "--local", action="store_true", help="offline TF-IDF match; no API key, no cost"
@@ -218,6 +310,90 @@ def cmd_build_profile(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_index_postings(args: argparse.Namespace) -> int:
+    """Build or update the vector store from ./job_postings/."""
+    from jobmatch.postings import PostingsError, load_postings
+    from jobmatch.retrieval import BACKEND_TFIDF, RetrievalError, build_index
+
+    try:
+        postings = load_postings(args.postings)
+    except PostingsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    print(f"Scanned {args.postings}/")
+    print(f"  postings found  : {len(postings)}")
+
+    if args.retrieval_backend == BACKEND_TFIDF:
+        print("  backend         : tfidf - no vector store needed, nothing to build")
+        print("\n  `rank` and `match` will compute TF-IDF similarity on the fly.")
+        return EXIT_OK
+
+    print(f"  embedding model : {args.embedding_model}")
+    print(f"  chunking        : {args.chunk_size} chars, {args.chunk_overlap} overlap")
+    if args.rebuild:
+        print("  mode            : --rebuild (deleting the existing store)")
+    print("  embedding...      (first run downloads the model, ~90 MB)")
+
+    try:
+        report = build_index(
+            postings,
+            args.store,
+            backend=args.retrieval_backend,
+            model_name=args.embedding_model,
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+            rebuild=args.rebuild,
+        )
+    except (RetrievalError, PostingsError) as exc:
+        print(f"\nerror: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    print()
+    print(f"  added           : {len(report.added)}")
+    print(f"  updated         : {len(report.updated)}")
+    print(f"  unchanged       : {len(report.unchanged)} (not re-embedded)")
+    if report.removed:
+        print(f"  removed         : {len(report.removed)} (file no longer present)")
+    print(f"  chunks embedded : {report.chunks_embedded} this run")
+    print(f"  chunks in store : {report.total_chunks}")
+    print()
+    print(f"  -> {report.store_dir}")
+    if not report.did_work:
+        print("\n  Store already current - nothing was re-embedded.")
+    return EXIT_OK
+
+
+def cmd_rank(args: argparse.Namespace) -> int:
+    """Retrieval stage only: rank every posting, make no API calls."""
+    from jobmatch.postings import PostingsError, load_postings
+    from jobmatch.profile_builder import load_profile
+    from jobmatch.retrieval import RetrievalError, format_ranking
+
+    try:
+        profile = load_profile(args.profile)
+        postings = load_postings(args.postings)
+        ranking, _report = _rank(args, profile, postings)
+    except (FileNotFoundError, PostingsError, RetrievalError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    if args.json:
+        import json
+        from dataclasses import asdict
+
+        print(json.dumps([asdict(score) for score in ranking], indent=2))
+        return EXIT_OK
+
+    top_k = args.top_k if args.top_k is not None else DEFAULT_TOP_K
+    print(f"Retrieval ranking - {len(ranking)} posting(s), {args.retrieval_backend} backend")
+    print()
+    print(format_ranking(ranking, top_k=top_k, color=not args.no_color))
+    print()
+    print("  no API calls were made (retrieval is entirely local and free)")
+    return EXIT_OK
+
+
 def cmd_models(_args: argparse.Namespace) -> int:
     from jobmatch.pricing import DEFAULT_MODEL, PRICING
 
@@ -240,19 +416,130 @@ def cmd_match(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
-    jobs: list[tuple[str, str]] = []
-    for spec in args.jobs:
-        try:
-            jobs.append(_read_job(spec))
-        except OSError as exc:
-            print(f"error: cannot read job description {spec!r}: {exc}", file=sys.stderr)
+    # In API mode, check credentials before running retrieval. Retrieval takes a
+    # few seconds of embedding, and there is no reason to spend them only to
+    # then discover the key is missing. (_run_api re-checks; this is just for
+    # failing fast.)
+    if not args.local and not args.dry_run:
+        from jobmatch.preflight import check_credentials
+
+        report = check_credentials()
+        if not report.ok:
+            print(f"error: {report.detail}\n", file=sys.stderr)
+            print(report.instructions(), file=sys.stderr)
             return EXIT_ERROR
+
+    jobs: list[tuple[str, str]] = []
+    if args.jobs:
+        # Explicit files: the original behaviour, unchanged. Retrieval has
+        # nothing to decide when you have already named the postings.
+        if args.top_k is not None:
+            print(
+                "note: --top-k applies to retrieval; ignoring it because explicit "
+                "JOB files were given.",
+                file=sys.stderr,
+            )
+        for spec in args.jobs:
+            try:
+                jobs.append(_read_job(spec))
+            except OSError as exc:
+                print(f"error: cannot read job description {spec!r}: {exc}", file=sys.stderr)
+                return EXIT_ERROR
+    else:
+        # No files named: run the retrieval stage over ./job_postings/ and feed
+        # only the top-k into whichever reasoning mode was selected.
+        selected = _retrieve_jobs(args, profile)
+        if selected is None:
+            return EXIT_ERROR
+        jobs = selected
 
     if args.local:
         return _run_local(args, profile, jobs)
     if args.dry_run:
         return _run_dry_run(args, profile, jobs)
     return _run_api(args, profile, jobs)
+
+
+# --------------------------------------------------------------------------
+# Retrieval -> reasoning bridge
+# --------------------------------------------------------------------------
+#
+# The whole extension hinges on one fact: _run_local, _run_dry_run and _run_api
+# all take the same `list[tuple[name, text]]`. So retrieval's only job is to
+# produce a shorter, better-ordered version of that list. None of the three
+# reasoning paths below needed to change.
+
+
+def _rank(args: argparse.Namespace, profile: str, postings: list):
+    """Run the retrieval stage. Shared by `rank` and `match`."""
+    from jobmatch.retrieval import rank_postings
+
+    return rank_postings(
+        profile,
+        postings,
+        args.store,
+        backend=args.retrieval_backend,
+        model_name=args.embedding_model,
+        chunk_size=args.chunk_size,
+        chunk_overlap=args.chunk_overlap,
+        fanout=args.fanout,
+    )
+
+
+def _retrieve_jobs(
+    args: argparse.Namespace, profile: str
+) -> list[tuple[str, str]] | None:
+    """Rank ./job_postings/ and return the top-k as (label, text) pairs.
+
+    Prints the full ranking first, including the postings it is about to
+    discard, so the pre-filtering decision is visible before anything is spent
+    on it. Returns None on error.
+    """
+    from jobmatch.postings import PostingsError, load_postings
+    from jobmatch.retrieval import RetrievalError, format_ranking
+
+    try:
+        postings = load_postings(args.postings)
+        ranking, report = _rank(args, profile, postings)
+    except (PostingsError, RetrievalError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return None
+
+    top_k = args.top_k if args.top_k is not None else DEFAULT_TOP_K
+
+    print("=" * 78)
+    print(f"RETRIEVAL STAGE - {len(ranking)} posting(s), {args.retrieval_backend} backend, $0.00")
+    print("=" * 78)
+    if report is not None and report.did_work:
+        print(
+            f"  index updated: +{len(report.added)} new, ~{len(report.updated)} changed, "
+            f"-{len(report.removed)} removed, {report.chunks_embedded} chunk(s) embedded"
+        )
+        print()
+    print(format_ranking(ranking, top_k=top_k, color=not args.no_color))
+    print()
+
+    by_slug = {posting.slug: posting for posting in postings}
+    selected: list[tuple[str, str]] = []
+    for score in ranking[:top_k]:
+        posting = by_slug.get(score.slug)
+        if posting is None:
+            continue
+        if score.score <= 0:
+            # Retrieval found no overlap at all. Reasoning over it would be a
+            # paid call with a foregone conclusion.
+            print(f"  skipping {score.label!r}: retrieval score 0 (no overlap found)")
+            continue
+        selected.append((posting.label, posting.text))
+
+    if not selected:
+        print(
+            "error: retrieval selected no postings. Check that ./job_postings/ holds "
+            "postings related to your profile, or raise --top-k.",
+            file=sys.stderr,
+        )
+        return None
+    return selected
 
 
 def _read_job(spec: str) -> tuple[str, str]:
@@ -433,6 +720,8 @@ def _emit(results: list, args: argparse.Namespace) -> None:
 COMMANDS = {
     "check": cmd_check,
     "build-profile": cmd_build_profile,
+    "index-postings": cmd_index_postings,
+    "rank": cmd_rank,
     "match": cmd_match,
     "models": cmd_models,
 }

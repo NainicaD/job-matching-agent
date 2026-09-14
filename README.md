@@ -62,11 +62,15 @@ works with `ANTHROPIC_API_KEY` unset and the `anthropic` package uninstalled.
 ```bash
 python match.py check                              # verify credentials
 python match.py build-profile                      # ./resumes/ -> profile.txt
-python match.py match job.txt                      # API mode (default)
+python match.py index-postings                     # ./job_postings/ -> vector store
+python match.py rank                               # rank all postings, no API calls
+python match.py match --top-k 5                    # retrieval + API reasoning on top 5
+python match.py match --top-k 5 --dry-run          # retrieval + payloads, send nothing
+python match.py match --top-k 5 --local            # retrieval + offline reasoning
+python match.py match job.txt                      # API mode on one explicit file
 python match.py match job.txt --dry-run            # inspect the payload, send nothing
 python match.py match job.txt --local              # offline, free
 python match.py match job.txt --model claude-sonnet-5
-python match.py match jobs/*.txt                   # several jobs, one session total
 python match.py models                             # model IDs and prices
 ```
 
@@ -110,6 +114,172 @@ Put the job description in a text file (or pipe it in with `-`):
 
 ```bash
 python match.py match jobs/example_ml_engineer.txt
+```
+
+---
+
+## The retrieval stage (RAG)
+
+Matching one job at a time is fine. Matching fifty is not: at ~$0.03 a call
+that is $1.50 to discover that forty of them were never a fit. The retrieval
+stage puts a free, local filter in front of the paid reasoning stage.
+
+```
+job_postings/*.txt
+    |  load + chunk          (LangChain)
+    v
+embed each chunk             (sentence-transformers, local, free)
+    |
+    v
+Chroma vector store on disk  <-- persisted; unchanged postings are never re-embedded
+    |  similarity search, once per profile chunk
+    v
+ranked postings -> top-k ----> the existing reasoning stage (the only paid step)
+```
+
+Nothing above the last arrow costs anything or needs an API key.
+
+### Commands
+
+```bash
+python match.py index-postings     # embed ./job_postings/ into ./chroma_db/
+python match.py rank               # print the ranking, make no API calls
+python match.py match --top-k 5    # rank, then reason over the best 5
+```
+
+`rank` prints every posting with its score, so the filtering decision is
+visible before it is acted on:
+
+```
+   #  score  posting                                               chunks
+  --------------------------------------------------------------------------
+-> 1   78.9  SAP GTS Consultant - Arbor Consulting Partners        5/5
+-> 2   70.7  Teaching Assistant, Data Structures and Machine L...  4/4
+-> 3   64.2  Graduate Research Assistant, Applied Machine Lear...  4/4
+-> 4   63.0  NLP Engineer, Retrieval & Generation - Corvus AI      5/5
+-> 5   61.5  Data Scientist, Clinical Analytics - Meridian Hea...  5/5
+   6   57.4  Machine Learning Engineer, Intern (Summer 2026) -...  5/5
+  ...
+  12   34.9  Registered Nurse, Intensive Care Unit - St. John ...  3/3
+
+  top 5 selected for reasoning; 7 posting(s) filtered out before any API call
+```
+
+`match --top-k 5` prints that same table, then runs the **existing** API-mode
+matcher on the five selected postings — same request construction, same error
+handling, same JSON validation, same cost tracking and session total. The
+reasoning stage was not rewritten; it just receives fewer inputs.
+
+The same is true of `--dry-run` and `--local`: both run retrieval first, then
+feed the top-k into the path they already had.
+
+### What the pre-ranking saves
+
+12 postings, `claude-haiku-4-5`, profile at ~23k input tokens:
+
+| | API calls | Cost |
+|---|---|---|
+| Every posting | 12 | ~$0.086 |
+| `--top-k 5` | 5 | ~$0.051 |
+| `--top-k 3` | 3 | ~$0.041 |
+| `rank` only | 0 | $0.00 |
+
+The saving grows with the corpus, and with prompt caching the marginal call is
+cheap — so the real win is at 50+ postings, where retrieval turns "$1.50 and
+five minutes" into "$0.05 and five seconds". Retrieval itself costs about two
+seconds of CPU for 12 postings and is then cached on disk.
+
+### How it works, and why each step is there
+
+**Chunking** (`jobmatch/postings.py`). An embedding model compresses its whole
+input into one fixed-length vector, and `all-MiniLM-L6-v2` truncates at 256
+word-pieces. Embedding a 2,000-word posting whole does not fail loudly — it
+silently encodes the opening and discards the requirements section. Chunking
+keeps the tail of the document in the index at all. It also avoids dilution: one
+vector for a long document is an average of everything in it, so a posting that
+is 90% boilerplate produces a boilerplate-shaped vector.
+
+`chunk_size=400` was chosen by measurement, not taste. At 800 these postings
+produced 2–3 chunks each, which quietly broke the scoring below (it averages a
+posting's best 3 chunks — with 2 chunks that is just "all of them", and the
+dilution problem returns). At 400 each posting yields 3–5 chunks. On this corpus
+that moved a strongly-matching NLP posting from 6th to 4th and pushed an
+unrelated infrastructure posting from 8th to 10th.
+
+`chunk_overlap=80` repeats each chunk's tail at the head of the next, so a split
+landing mid-phrase — `"experience with transformer"` | `"architectures"` — does
+not lose text that only means something whole.
+
+**The profile is chunked too**, for the same truncation reason, and it matters
+more: `profile.txt` is ~90 KB, so embedding it whole would encode roughly its
+first 200 words and discard every project below that.
+
+**Embedding + store** (`jobmatch/retrieval.py`). `HuggingFaceEmbeddings` wraps
+sentence-transformers behind LangChain's `Embeddings` interface
+(`embed_documents` for indexing, `embed_query` for searching). The Chroma
+collection is created with `hnsw:space=cosine` — Chroma defaults to squared L2,
+which is wrong for sentence embeddings — so the distance it returns is
+`1 - cosine_similarity` and converts back with one subtraction. That conversion
+is done explicitly rather than via `similarity_search_with_relevance_scores`, so
+the arithmetic is visible.
+
+**Search and aggregation.** One similarity search per *profile* chunk, not one
+for the whole profile. Search returns chunks, but the decision is about
+postings, so chunk scores are combined — and the choice matters:
+
+- `max` is too generous: nearly every posting has one "strong communication
+  skills" paragraph that matches any profile, so unrelated postings score high.
+- mean over *all* chunks punishes long postings: a great match padded with
+  benefits boilerplate scores below a short mediocre one.
+- **mean of the best 3** requires that several parts of the posting connect to
+  the profile without punishing filler. Same intuition as `recall@k` — one hit
+  is noise, a cluster is signal.
+
+`tests/test_retrieval.py` asserts all three of those properties directly.
+
+**Incremental indexing.** Embedding is the slow part, so each stored chunk
+carries an *index key* covering the posting's content hash, the chunk size and
+overlap, and the model name. Re-running `index-postings` re-embeds only what
+changed. All three inputs are in the key deliberately: hashing just the text was
+a bug, because changing `--chunk-size` then left every key identical and the
+store went on answering queries from vectors built under the old settings.
+
+### Scores are a sort key, not a percentage
+
+Retrieval scores are only comparable *to each other within one ranking*. They
+say "spend your calls here first", not "you are a 78% fit". The reasoning stage
+produces the actual judgement.
+
+### The zero-network fallback
+
+The embedding backend needs a one-time ~90 MB model download. If you are offline,
+or would rather not install torch:
+
+```bash
+python match.py rank --retrieval-backend tfidf
+python match.py match --top-k 5 --local --retrieval-backend tfidf
+```
+
+That path reuses the stdlib TF-IDF already in `local_matcher` — no LangChain, no
+Chroma, no model, no vector store (recomputing TF-IDF on a corpus this size
+costs milliseconds, so persistence would be complexity for nothing). It is a
+genuinely weaker ranker, and the difference is instructive: on this corpus the
+lexical backend ranks the NLP Engineer posting 8th because the profile says
+"information retrieval" and "transformer" where the posting says "semantic
+search" and "embedding pipelines". The embedding backend ranks it 4th. That gap
+*is* what embeddings buy you.
+
+### A note on what retrieval sees
+
+`profile.txt` consolidates every resume version in `./resumes/`. If those target
+very different roles — ML engineering, research, program coordination — the
+merged profile is genuinely a generalist one, and the ranking reflects that
+rather than your current focus. If you want retrieval to rank for one direction,
+build a profile from a narrower set of resumes:
+
+```bash
+python match.py build-profile --resumes ./resumes_ml --out profile.ml.txt
+python match.py rank --profile profile.ml.txt
 ```
 
 ---
@@ -230,8 +400,11 @@ call are computed from `response.usage`, not estimated.
 ## Project layout
 
 ```
-match.py                     CLI. Imports anthropic lazily so --local works without it.
+match.py                     CLI. Imports anthropic and LangChain lazily, so --local
+                             and the tfidf backend work without either installed.
 jobmatch/
+  postings.py                RETRIEVAL: load + chunk postings (LangChain loaders/splitter).
+  retrieval.py               RETRIEVAL: embeddings, Chroma, similarity search, ranking.
   api_matcher.py             API mode: request construction, parsing, errors, cost.
   pricing.py                 Model price table and cost arithmetic. API path only.
   preflight.py               Credential check + the 1-token verification call.
@@ -243,9 +416,16 @@ jobmatch/
 resumes/                     Your resumes. Gitignored - these never leave your machine.
 profile.txt                  Generated. Gitignored: it consolidates your whole
                              work history into one file. Run build-profile to make it.
-jobs/                        Job descriptions.
+job_postings/                The posting corpus that retrieval ranks.
+chroma_db/                   Generated vector store. Gitignored; rebuild with index-postings.
+jobs/                        Single job descriptions for the explicit-file flow.
 tests/                       Run each file directly; no pytest required.
 ```
+
+The retrieval modules are additive: `api_matcher.py`, `local_matcher.py` and
+`profile_builder.py` were not modified. The only wiring change is in
+[match.py](match.py) — all three reasoning paths already took a
+`list[(name, text)]`, so retrieval just produces a shorter, better-ordered one.
 
 `result.py` holds the shared result shape deliberately: putting it in
 `api_matcher.py` would have forced local mode to import the API path to describe
@@ -260,8 +440,14 @@ No pytest needed — each file runs on its own:
 ```bash
 python tests/test_profile_builder.py     # extraction, repair, idempotence, dedupe
 python tests/test_api_matcher.py         # API path, against a fake client (costs nothing)
-python tests/test_local_isolation.py     # proves local mode is standalone
+python tests/test_retrieval.py           # chunking, scoring, index invalidation
+python tests/test_local_isolation.py     # proves local mode + retrieval are standalone
 ```
+
+`test_retrieval.py` never loads the embedding model or touches the network:
+`_aggregate` is handed synthetic chunk similarities and `_index_key` is
+arithmetic over strings, so the scoring decisions are tested directly and the
+file runs in under a second.
 
 `test_api_matcher.py` fakes the client, so it exercises the paths that are
 otherwise hard to reach on purpose — a 429 carrying `retry-after`, a truncated

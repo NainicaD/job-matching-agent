@@ -1,0 +1,27 @@
+Title: Quantitative Research Analyst
+Company: Tessera Capital
+Location: Boston, MA
+
+Overview
+Research and validate systematic strategies using statistical and machine
+learning methods on financial and alternative datasets.
+
+Responsibilities
+- Design and test hypotheses on large panel datasets.
+- Apply causal inference methods to separate correlation from effect.
+- Build gradient-boosted and regularized linear models; rigorously guard
+  against overfitting with cross-validation and out-of-sample testing.
+- Construct reproducible research pipelines in Python.
+- Document methodology and present to the investment committee.
+
+Required
+- Master's or PhD in Statistics, Economics, Data Science, or related.
+- Strong statistical foundations: hypothesis testing, regression,
+  regularization, cross-validation.
+- Python with pandas, NumPy, scikit-learn.
+- SQL for large dataset manipulation.
+
+Preferred
+- Experience with causal inference: difference-in-differences,
+  instrumental variables, propensity matching.
+- Interest in fraud or anomaly detection methods.

@@ -104,6 +104,62 @@ print("SCORE:%.1f" % result.score)
           f"({proc.stdout.strip()})")
 
 
+def test_retrieval_imports_no_api_module() -> None:
+    """The retrieval stage runs ahead of --local, so it must stay API-free too."""
+    code = f"""
+import sys
+import jobmatch.retrieval
+import jobmatch.postings
+leaked = [m for m in {FORBIDDEN!r} if m in sys.modules]
+print("LEAKED:" + ",".join(leaked))
+"""
+    proc = _run(code)
+    assert proc.returncode == 0, f"import failed:\n{proc.stderr}"
+    leaked = proc.stdout.strip().removeprefix("LEAKED:")
+    assert not leaked, f"retrieval pulled in API modules: {leaked}"
+    print("ok  retrieval/postings import no API module")
+
+
+def test_tfidf_retrieval_needs_no_network_or_langchain() -> None:
+    """The tfidf retrieval backend must work with LangChain and anthropic absent.
+
+    This is what makes the "zero network" claim literal: the embedding backend
+    needs a one-time model download, but this path needs nothing at all.
+    """
+    code = """
+import sys
+
+class Blocker:
+    BLOCKED = ("anthropic", "langchain", "langchain_core", "langchain_chroma",
+               "langchain_community", "langchain_text_splitters",
+               "langchain_huggingface", "chromadb", "sentence_transformers", "torch")
+    def find_module(self, name, path=None):
+        root = name.split(".")[0]
+        if root in (b.split(".")[0] for b in self.BLOCKED):
+            raise ImportError(f"{name} is not installed (simulated)")
+        return None
+
+sys.meta_path.insert(0, Blocker())
+
+from pathlib import Path
+from jobmatch.postings import load_postings
+from jobmatch.retrieval import rank_tfidf
+
+postings = load_postings(Path("job_postings"))
+assert postings, "no postings loaded"
+ranking = rank_tfidf(PROFILE, postings)
+assert len(ranking) == len(postings)
+assert ranking == sorted(ranking, key=lambda s: (-s.score, s.slug)), "not sorted"
+assert any(s.score > 0 for s in ranking), "everything scored zero"
+print("RANKED:%d top=%s" % (len(ranking), ranking[0].slug))
+""".replace("PROFILE", repr(SAMPLE_PROFILE))
+    proc = _run(code)
+    assert proc.returncode == 0, f"tfidf retrieval failed:\n{proc.stdout}\n{proc.stderr}"
+    assert "RANKED:" in proc.stdout, proc.stdout
+    print(f"ok  tfidf retrieval works with langchain/torch/anthropic all blocked "
+          f"({proc.stdout.strip()})")
+
+
 def test_cli_local_runs_without_key() -> None:
     """The documented CLI invocation must work with ANTHROPIC_API_KEY unset."""
     import os
@@ -124,12 +180,39 @@ def test_cli_local_runs_without_key() -> None:
     print("ok  `match.py match --local` runs with no API key set")
 
 
+def test_cli_retrieval_local_runs_without_key() -> None:
+    """The full retrieval -> local-reasoning pipeline, with no API key."""
+    import os
+
+    env = dict(os.environ)
+    env.pop("ANTHROPIC_API_KEY", None)
+    env.pop("ANTHROPIC_AUTH_TOKEN", None)
+    with tempfile.TemporaryDirectory() as tmp:
+        profile_path = Path(tmp) / "profile.txt"
+        profile_path.write_text(SAMPLE_PROFILE, encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, "match.py", "match", "--top-k", "2", "--local",
+             "--retrieval-backend", "tfidf", "--no-color",
+             "--profile", str(profile_path)],
+            cwd=PROJECT_ROOT, capture_output=True, text=True, env=env,
+        )
+    assert proc.returncode == 0, f"CLI failed:\n{proc.stdout}\n{proc.stderr}"
+    assert "RETRIEVAL STAGE" in proc.stdout, proc.stdout[:600]
+    assert "top 2 selected for reasoning" in proc.stdout, proc.stdout[:600]
+    # Two postings ranked, two match reports rendered.
+    assert proc.stdout.count("Match report") == 2, proc.stdout[:600]
+    print("ok  retrieval -> local reasoning runs end-to-end with no API key")
+
+
 if __name__ == "__main__":
     failures = 0
     for test in (
         test_import_graph_is_clean,
+        test_retrieval_imports_no_api_module,
         test_local_match_works_without_anthropic_installed,
+        test_tfidf_retrieval_needs_no_network_or_langchain,
         test_cli_local_runs_without_key,
+        test_cli_retrieval_local_runs_without_key,
     ):
         try:
             test()
