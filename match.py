@@ -470,6 +470,16 @@ def cmd_match(args: argparse.Namespace) -> int:
 # reasoning paths below needed to change.
 
 
+def _chatter(args: argparse.Namespace):
+    """Where human-readable progress output goes.
+
+    With --json, stdout has to stay parseable, so the retrieval table and the
+    cost summary go to stderr instead of being dropped. You still see them in a
+    terminal; a pipe into `jq` still gets clean JSON.
+    """
+    return sys.stderr if getattr(args, "json", False) else sys.stdout
+
+
 def _rank(args: argparse.Namespace, profile: str, postings: list):
     """Run the retrieval stage. Shared by `rank` and `match`."""
     from jobmatch.retrieval import rank_postings
@@ -506,18 +516,24 @@ def _retrieve_jobs(
         return None
 
     top_k = args.top_k if args.top_k is not None else DEFAULT_TOP_K
+    out = _chatter(args)
+    color = not args.no_color and not getattr(args, "json", False)
 
-    print("=" * 78)
-    print(f"RETRIEVAL STAGE - {len(ranking)} posting(s), {args.retrieval_backend} backend, $0.00")
-    print("=" * 78)
+    print("=" * 78, file=out)
+    print(
+        f"RETRIEVAL STAGE - {len(ranking)} posting(s), {args.retrieval_backend} backend, $0.00",
+        file=out,
+    )
+    print("=" * 78, file=out)
     if report is not None and report.did_work:
         print(
             f"  index updated: +{len(report.added)} new, ~{len(report.updated)} changed, "
-            f"-{len(report.removed)} removed, {report.chunks_embedded} chunk(s) embedded"
+            f"-{len(report.removed)} removed, {report.chunks_embedded} chunk(s) embedded",
+            file=out,
         )
-        print()
-    print(format_ranking(ranking, top_k=top_k, color=not args.no_color))
-    print()
+        print(file=out)
+    print(format_ranking(ranking, top_k=top_k, color=color), file=out)
+    print(file=out)
 
     by_slug = {posting.slug: posting for posting in postings}
     selected: list[tuple[str, str]] = []
@@ -528,7 +544,10 @@ def _retrieve_jobs(
         if score.score <= 0:
             # Retrieval found no overlap at all. Reasoning over it would be a
             # paid call with a foregone conclusion.
-            print(f"  skipping {score.label!r}: retrieval score 0 (no overlap found)")
+            print(
+                f"  skipping {score.label!r}: retrieval score 0 (no overlap found)",
+                file=out,
+            )
             continue
         selected.append((posting.label, posting.text))
 
@@ -580,8 +599,7 @@ def _run_local(args: argparse.Namespace, profile: str, jobs: list[tuple[str, str
             return EXIT_ERROR
 
     _emit(results, args)
-    if not args.json:
-        print("  cost: $0.00 (offline)")
+    print(f"  cost: $0.00 (offline, {len(results)} posting(s))", file=_chatter(args))
     return EXIT_OK
 
 
@@ -693,8 +711,13 @@ def _run_api(args: argparse.Namespace, profile: str, jobs: list[tuple[str, str]]
 
     if args.json:
         _emit(results, args)
-    elif client.tracker.calls > 1:
-        print(client.tracker.format_session())
+
+    # The running total across every call in this run. Printed unconditionally:
+    # with retrieval driving the job list, "what did this run cost" is the
+    # headline number, and it was previously hidden for single-call runs and
+    # suppressed entirely under --json.
+    if client.tracker.calls:
+        print(client.tracker.format_session(), file=_chatter(args))
 
     if not results:
         return EXIT_ERROR

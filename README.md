@@ -441,7 +441,14 @@ No pytest needed — each file runs on its own:
 python tests/test_profile_builder.py     # extraction, repair, idempotence, dedupe
 python tests/test_api_matcher.py         # API path, against a fake client (costs nothing)
 python tests/test_retrieval.py           # chunking, scoring, index invalidation
+python tests/test_cli_wiring.py          # retrieval -> reasoning wiring, --json, --top-k
 python tests/test_local_isolation.py     # proves local mode + retrieval are standalone
+```
+
+Or all of them:
+
+```bash
+for t in tests/test_*.py; do echo "--- $t"; python "$t" | tail -1; done
 ```
 
 `test_retrieval.py` never loads the embedding model or touches the network:
